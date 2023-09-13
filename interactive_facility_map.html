@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Facilities Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <style>
+        /* Make map take up full page */
+        #mapid {
+            height: 100vh;
+            width: 100vw;
+        }
+    </style>
+</head>
+<body>
+
+<div id="mapid"></div>
+
+<script>
+    // Initialize the Leaflet map
+    var map = L.map('mapid').setView([30.2672, -97.7431], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+    }).addTo(map);
+
+    // Variables to hold bsw & competitor layers
+    var competitorLayers = [];
+    var bswLayers = []; 
+
+    // Create a Reset button
+    var resetButton = L.control({position: 'topleft'});
+
+    resetButton.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+        div.innerHTML = '<button onclick="resetMap()">Reset</button>';
+        return div;
+    };
+
+    resetButton.addTo(map);
+
+    // Function to reset the map to full view
+    window.resetMap = function() {
+        competitorLayers.forEach(function(compLayer) {
+            compLayer.addTo(map);
+        });
+    };
+
+    // Function to calculate distance in miles between two coordinates
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        var R = 3958.8; // Radius of Earth in miles
+        var dLat = (lat2 - lat1) * (Math.PI / 180);
+        var dLon = (lon2 - lon1) * (Math.PI / 180);
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        var distance = R * c;
+        return distance;
+    }
+
+    // Fetch and add BSW facilities to the map
+    fetch('bsw_facilities.geojson')
+    .then(response => response.json())
+    .then(data => {
+        L.geoJSON(data, {
+            pointToLayer: function (feature, latlng) {
+                return L.circleMarker(latlng, {color: 'blue'});
+            },
+            onEachFeature: function (feature, layer) {
+                // Attach a tooltip with the name of the facility
+                if (feature.properties && feature.properties["Access Point"]) {
+                    layer.bindTooltip(feature.properties["Access Point"]);
+                }
+                bswLayers.push(layer);  // Push each BSW layer to the bswLayers array
+                layer.on('click', function (e) {
+                    var clickedLat = e.latlng.lat;
+                    var clickedLon = e.latlng.lng;
+
+                    // Remove all layers to prepare for filtering
+                    competitorLayers.forEach(function(compLayer) {
+                        compLayer.remove();
+                    });
+                    bswLayers.forEach(function(bswLayer) {
+                        if (bswLayer !== layer) {  // Exclude the clicked layer from removal
+                            bswLayer.remove();
+                        }
+                    });
+
+                    // Filter and add back competitor facilities within 5 miles
+                    competitorLayers.forEach(function(compLayer) {
+                        var compLat = compLayer.getLatLng().lat;
+                        var compLon = compLayer.getLatLng().lng;
+                        var distance = calculateDistance(clickedLat, clickedLon, compLat, compLon);
+                        if (distance <= 5) {
+                            compLayer.addTo(map);
+                        }
+                    });
+
+                    // Filter and add back BSW facilities within 5 miles
+                    bswLayers.forEach(function(bswLayer) {
+                        var layerLat = bswLayer.getLatLng().lat;
+                        var layerLon = bswLayer.getLatLng().lng;
+                        var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
+                        if (distance > 5) {
+                            bswLayer.addTo(map);
+                        }
+                    });
+
+                    // Ensure the clicked layer is added back to the map
+                    layer.addTo(map);
+                });
+
+            }
+        }).addTo(map);
+    });
+
+    // Fetch and add competitor facilities to the map
+    fetch('competitor_facilities.geojson')
+    .then(response => response.json())
+    .then(data => {
+        L.geoJSON(data, {
+            pointToLayer: function (feature, latlng) {
+                return L.circleMarker(latlng, {color: 'red'});
+            },
+            onEachFeature: function (feature, layer) {
+                // Attach a tooltip with the name of the facility
+                if (feature.properties && feature.properties.FACILITY_THCIC_NM) {
+                    layer.bindTooltip(feature.properties.FACILITY_THCIC_NM);
+                }
+                competitorLayers.push(layer);
+            }
+        }).addTo(map);
+    });
+</script>
+
+</body>
+</html>
