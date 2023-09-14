@@ -24,8 +24,7 @@
     }).addTo(map);
 
     // Variables to hold bsw & competitor layers
-    var competitorLayers = [];
-    var bswLayers = []; 
+    var allFacilityLayers = [];
 
     // Create a Reset button
     var resetButton = L.control({position: 'topleft'});
@@ -40,7 +39,7 @@
 
     // Function to reset the map to full view
     window.resetMap = function() {
-        competitorLayers.forEach(function(compLayer) {
+        allFacilityLayers.forEach(function(compLayer) {
             compLayer.addTo(map);
         });
     };
@@ -58,58 +57,46 @@
         return distance;
     }
 
+    // Function to handle the click event for any facility
+    function handleFacilityClick(e) {
+        var clickedLat = e.latlng.lat;
+        var clickedLon = e.latlng.lng;
+
+        // Remove all layers to prepare for filtering
+        allFacilityLayers.forEach(function(layer) {
+            layer.remove();
+        });
+
+        // Filter and add back facilities within 5 miles
+        allFacilityLayers.forEach(function(layer) {
+            var layerLat = layer.getLatLng().lat;
+            var layerLon = layer.getLatLng().lng;
+            var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
+            if (distance <= 5) {
+                layer.addTo(map);
+            }
+        });
+    }
+
+    // Define custom icons
+    var bswIcon = L.divIcon({className: 'bsw-icon', html: '<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%;"></div>'});
+    var competitorIcon = L.divIcon({className: 'competitor-icon', html: '<div style="background-color: red; width: 10px; height: 10px; border-radius: 50%;"></div>'});
+
     // Fetch and add BSW facilities to the map
     fetch('bsw_facilities.geojson')
     .then(response => response.json())
     .then(data => {
         L.geoJSON(data, {
             pointToLayer: function (feature, latlng) {
-                return L.circleMarker(latlng, {color: 'blue'});
+                return L.marker(latlng, {icon: bswIcon});  // Using L.marker
             },
             onEachFeature: function (feature, layer) {
                 // Attach a tooltip with the name of the facility
                 if (feature.properties && feature.properties["Access Point"]) {
                     layer.bindTooltip(feature.properties["Access Point"]);
                 }
-                bswLayers.push(layer);  // Push each BSW layer to the bswLayers array
-                layer.on('click', function (e) {
-                    var clickedLat = e.latlng.lat;
-                    var clickedLon = e.latlng.lng;
-
-                    // Remove all layers to prepare for filtering
-                    competitorLayers.forEach(function(compLayer) {
-                        compLayer.remove();
-                    });
-                    bswLayers.forEach(function(bswLayer) {
-                        if (bswLayer !== layer) {  // Exclude the clicked layer from removal
-                            bswLayer.remove();
-                        }
-                    });
-
-                    // Filter and add back competitor facilities within 5 miles
-                    competitorLayers.forEach(function(compLayer) {
-                        var compLat = compLayer.getLatLng().lat;
-                        var compLon = compLayer.getLatLng().lng;
-                        var distance = calculateDistance(clickedLat, clickedLon, compLat, compLon);
-                        if (distance <= 5) {
-                            compLayer.addTo(map);
-                        }
-                    });
-
-                    // Filter and add back BSW facilities within 5 miles
-                    bswLayers.forEach(function(bswLayer) {
-                        var layerLat = bswLayer.getLatLng().lat;
-                        var layerLon = bswLayer.getLatLng().lng;
-                        var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
-                        if (distance > 5) {
-                            bswLayer.addTo(map);
-                        }
-                    });
-
-                    // Ensure the clicked layer is added back to the map
-                    layer.addTo(map);
-                });
-
+                layer.on('click', handleFacilityClick);
+                allFacilityLayers.push(layer);  // Push each layer to the allFacilityLayers array
             }
         }).addTo(map);
     });
@@ -120,14 +107,15 @@
     .then(data => {
         L.geoJSON(data, {
             pointToLayer: function (feature, latlng) {
-                return L.circleMarker(latlng, {color: 'red'});
+                return L.marker(latlng, {icon: competitorIcon});  // Using L.marker
             },
             onEachFeature: function (feature, layer) {
                 // Attach a tooltip with the name of the facility
                 if (feature.properties && feature.properties.FACILITY_THCIC_NM) {
                     layer.bindTooltip(feature.properties.FACILITY_THCIC_NM);
                 }
-                competitorLayers.push(layer);
+                layer.on('click', handleFacilityClick);
+                allFacilityLayers.push(layer);  // Push each layer to the allFacilityLayers array
             }
         }).addTo(map);
     });
