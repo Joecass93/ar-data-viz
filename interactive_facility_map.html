@@ -26,8 +26,17 @@
     // Variables to hold bsw & competitor layers
     var allFacilityLayers = [];
 
-    // Create a Reset button
+    // Create a Reset button + Distance Control textbox
+    var distanceControl = L.control({position: 'topleft'});
     var resetButton = L.control({position: 'topleft'});
+    
+    distanceControl.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+        div.innerHTML = '<input type="number" id="radiusInput" value="5" style="width: 50px;"> miles';
+        return div;
+    };
+
+    distanceControl.addTo(map);
 
     resetButton.onAdd = function (map) {
         var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
@@ -37,6 +46,7 @@
 
     resetButton.addTo(map);
 
+    
     // Function to reset the map to full view
     window.resetMap = function() {
         allFacilityLayers.forEach(function(compLayer) {
@@ -62,6 +72,9 @@
         var clickedLat = e.latlng.lat;
         var clickedLon = e.latlng.lng;
 
+        // Get the radius value from the input box
+        var radius = document.getElementById("radiusInput").value;
+
         // Remove all layers to prepare for filtering
         allFacilityLayers.forEach(function(layer) {
             layer.remove();
@@ -72,7 +85,7 @@
             var layerLat = layer.getLatLng().lat;
             var layerLon = layer.getLatLng().lng;
             var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
-            if (distance <= 5) {
+            if (distance <= radius) {
                 layer.addTo(map);
             }
         });
