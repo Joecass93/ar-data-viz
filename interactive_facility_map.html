@@ -23,8 +23,9 @@
         maxZoom: 19,
     }).addTo(map);
 
-    // Variables to hold bsw & competitor layers
+    // Variables to hold bsw, competitor, and patient layers
     var allFacilityLayers = [];
+    var patientLayers = [];
 
     // Create a Reset button + Distance Control textbox
     var distanceControl = L.control({position: 'topleft'});
@@ -49,8 +50,11 @@
     
     // Function to reset the map to full view
     window.resetMap = function() {
-        allFacilityLayers.forEach(function(compLayer) {
-            compLayer.addTo(map);
+        allFacilityLayers.forEach(function(layer) {
+            layer.addTo(map);
+        });
+        patientLayers.forEach(function(layer) {
+            layer.addTo(map);
         });
     };
 
@@ -80,7 +84,11 @@
             layer.remove();
         });
 
-        // Filter and add back facilities within 5 miles
+        patientLayers.forEach(function(layer) {
+            layer.remove();
+        });
+
+        // Filter and add back facilities within the selected miles
         allFacilityLayers.forEach(function(layer) {
             var layerLat = layer.getLatLng().lat;
             var layerLon = layer.getLatLng().lng;
@@ -89,11 +97,61 @@
                 layer.addTo(map);
             }
         });
+
+        // Filter and add back patients within the selected miles
+        patientLayers.forEach(function(layer) {
+            var layerLat = layer.getLatLng().lat;
+            var layerLon = layer.getLatLng().lng;
+            var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
+            if (distance <= radius) {
+                layer.addTo(map);
+            }
+        });
+
+        e.target.addTo(map); // Add the clicked facility back to the map
     }
 
     // Define custom icons
     var bswIcon = L.divIcon({className: 'bsw-icon', html: '<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%;"></div>'});
     var competitorIcon = L.divIcon({className: 'competitor-icon', html: '<div style="background-color: red; width: 10px; height: 10px; border-radius: 50%;"></div>'});
+    var patientIcon = L.divIcon({className: 'patient-icon', html: '<div style="background-color: green; width: 10px; height: 10px; border-radius: 50%;"></div>'});
+
+    // Fetch and add patient data to the map
+    fetch('geocoded_atx_mover_sample.geojson')
+    .then(response => response.json())
+    .then(data => {
+        L.geoJSON(data, {
+            pointToLayer: function (feature, latlng) {
+                return L.marker(latlng, {icon: patientIcon});  // Using L.marker
+            },
+            onEachFeature: function (feature, layer) {
+                layer.on('click', function(e) {
+                    var clickedLat = e.latlng.lat;
+                    var clickedLon = e.latlng.lng;
+                    var radius = document.getElementById("radiusInput").value;
+
+                    allFacilityLayers.forEach(function(layer) {
+                        layer.remove();
+                    });
+                    patientLayers.forEach(function(layer) {
+                        layer.remove();
+                    });
+
+                    allFacilityLayers.forEach(function(layer) {
+                        var layerLat = layer.getLatLng().lat;
+                        var layerLon = layer.getLatLng().lng;
+                        var distance = calculateDistance(clickedLat, clickedLon, layerLat, layerLon);
+                        if (distance <= radius) {
+                            layer.addTo(map);
+                        }
+                    });
+
+                    layer.addTo(map);  // Add the clicked patient back to the map
+                });
+                patientLayers.push(layer);
+            }
+        }).addTo(map);
+    });
 
     // Fetch and add BSW facilities to the map
     fetch('bsw_facilities.geojson')
