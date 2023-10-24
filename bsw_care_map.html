@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Hospital Facilities Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <style>
+        #mapid {
+            height: 100vh;
+            width: 100vw;
+        }
+        #resetButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+<div id="mapid"></div>
+<button id="resetButton">Reset View</button>
+
+<script>
+
+    // Declare layers at the beginning of the script so they are accessible throughout
+    var bswLayer, competitorLayer, heatmapLayer;
+    var zipToPopulation = {};
+
+    // Fetch the CSV file
+    fetch('atx_population_density.csv')
+        .then(response => response.text())
+        .then(data => {
+            // Remove any Byte Order Mark from the beginning of the file
+            if (data.charCodeAt(0) === 0xFEFF) {
+                data = data.substr(1);
+            }
+
+            // Parse CSV
+            const lines = data.split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());  // Trim headers
+            
+            // console.log("Headers:", headers);  // Debug the headers
+
+            // Find the index of ZIP and POPULATIONSIZE
+            const zipIndex = headers.indexOf('TD_CASS_ZIP');
+            const populationIndex = headers.indexOf('POPULATIONSIZE');
+
+            // console.log("zipIndex:", zipIndex, "populationIndex:", populationIndex);  // Debug the indices
+
+            if (zipIndex === -1 || populationIndex === -1) {
+                console.error('ZIP or POPULATIONSIZE not found in CSV headers');
+                return;
+            }
+
+            for (let i = 1; i < lines.length; i++) {
+                const cells = lines[i].split(',');
+                // Remove commas and extra spaces
+                const populationString = cells[populationIndex].replace(/,/g, '').trim();
+                // console.log(populationString)
+                zipToPopulation[cells[zipIndex]] = parseFloat(populationString);
+            }
+            
+            // console.log(zipToPopulation)
+            
+            // Initialize map and layers
+            initializeMapAndLayers();
+        });
+
+    
+    function initializeMapAndLayers() {
+        fetch('filtered_tx_zip_codes.geojson')
+            .then(response => response.json())
+            .then(data => {
+
+                function getColorByFacilityType(type) {
+                switch (type) {
+                    case 'Home Health/Hospice': return 'blue';
+                    case 'Specialty Care Clinic': return 'green';
+                    case 'Outpatient Ancillary': return 'orange';
+                    case 'Primary Care Clinic': return 'purple';
+                    case 'Urgent Care Clinic': return 'red';
+                    case 'Hospital': return 'yellow';
+                    case 'Hospitalist Group': return 'brown';
+                    case 'Pharmacy': return 'pink';
+                    default: return 'grey';
+                    }   
+                }
+
+                // Define getColor function
+                function getColor(d) {
+                    return d > 30000 ? '#800026' :
+                        d > 25000  ? '#BD0026' :
+                        d > 20000  ? '#E31A1C' :
+                        d > 15000  ? '#FC4E2A' :
+                        d > 10000   ? '#FD8D3C' :
+                        d > 5000   ? '#FEB24C' :
+                        d > 1000   ? '#FED976' :
+                                    '#FFEDA0';
+                }
+
+                // Initialize the Leaflet map
+                var map = L.map('mapid').setView([30.2672, -97.7431], 10);
+
+                // Add a base map layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+
+                /// Fetch and plot BSW facilities
+                fetch('bsw_atx_facilities.geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        bswLayer = L.geoJSON(data, {
+                            pointToLayer: function(feature, latlng) {
+                                var marker = L.circleMarker(latlng, {
+                                    color: getColorByFacilityType(feature.properties['Access Point Type']),
+                                    radius: 5,
+                                    fillOpacity: 0.7
+                                });
+                                marker.on('click', function() {
+                                    console.log("Marker clicked");
+                                    filterByFacilityType(feature.properties['Access Point Type']);
+                                });
+                                return marker;
+                            }
+                        }).addTo(map);  // Add the GeoJSON layer directly to the map
+                    });
+
+                // Fetch and plot competitor facilities
+                fetch('competitor_facilities.geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        competitorLayer = L.geoJSON(data, {
+                            pointToLayer: function (feature, latlng) {
+                                return L.marker(latlng, {
+                                    icon: L.divIcon({
+                                        className: 'custom-div-icon',
+                                        html: "<div style='width:10px;height:10px;background:navy;transform:rotate(45deg);'></div>",
+                                        iconSize: [10, 10],
+                                        iconAnchor: [5, 5]
+                                    })
+                                });
+                            }
+                        }).addTo(map);
+                });
+
+                // Add GeoJSON layer to the map for the heatmap
+                heatmapLayer = L.geoJSON(data, {
+                    style: function(feature) {
+                        const population = zipToPopulation[feature.properties.ZCTA5CE10] || 0;
+                        return {
+                            fillColor: getColor(population),
+                            weight: 1,
+                            opacity: 1,
+                            color: 'white',
+                            dashArray: '3',
+                            fillOpacity: 0.3
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const population = zipToPopulation[feature.properties.ZCTA5CE10] || 0;
+                        layer.bindTooltip('Population: ' + population);
+                    }
+                }).addTo(map);
+
+                // New legend for density colors
+                var densityLegend = L.control({position: 'bottomleft'});
+
+                densityLegend.onAdd = function (map) {
+                    var div = L.DomUtil.create('div', 'info legend'),
+                        grades = [0, 1000, 5000, 10000, 15000, 20000, 25000, 30000],
+                        labels = [];
+
+                    // Loop through our density intervals and generate a label with a colored square for each interval
+                    for (var i = 0; i < grades.length; i++) {
+                        labels.push(
+                            '<div class="density-legend-item" data-min="' + grades[i] + '" data-max="' + (grades[i + 1] || Infinity) + '">' +
+                            '<i style="background:' + getColor(grades[i] + 1) + '; width: 20px; height: 20px; display: inline-block; margin-right: 5px;"></i> ' +
+                            grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] : '+') +
+                            '</div>'
+                        );
+                    }
+
+                    div.innerHTML = labels.join('<br>');
+                    return div;
+                };
+
+                densityLegend.addTo(map);
+
+                // Function to filter ZIP codes based on population
+                function filterByPopulation(min, max) {
+                    heatmapLayer.eachLayer(function(layer) {
+                        const population = zipToPopulation[layer.feature.properties.ZCTA5CE10] || 0;
+                        if (population >= min && population <= max) {
+                            layer.addTo(map);
+                        } else {
+                            map.removeLayer(layer);
+                        }
+                    });
+                }
+
+                // Add click event listener to density legend items
+                document.querySelectorAll('.density-legend-item').forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        const min = parseFloat(this.getAttribute('data-min'));
+                        const max = parseFloat(this.getAttribute('data-max'));
+                        filterByPopulation(min, max);
+                    });
+                });
+                
+                // Filter by facility type function
+                function filterByFacilityType(type) {
+                    // Remove only the BSW layer, keep the competitor and other layers
+                    map.removeLayer(bswLayer);
+
+                    // Create a new Layer Group for filtered BSW facilities
+                    var filteredBswLayer = L.layerGroup();
+
+                    // Add the layers that meet the filter criteria to the new Layer Group
+                    bswLayer.eachLayer(function(layer) {
+                        if (layer.feature.properties['Access Point Type'] === type) {
+                            filteredBswLayer.addLayer(layer);
+                        }
+                    });
+
+                    // Add the new Layer Group to the map
+                    filteredBswLayer.addTo(map);
+                }
+
+                // Reset view button
+                document.getElementById('resetButton').addEventListener('click', function() {
+                    // Remove only the BSW and competitor layers, keep others
+                    map.removeLayer(bswLayer);
+                    map.removeLayer(competitorLayer);
+
+                    // Add back all layers
+                    bswLayer.addTo(map);
+                    competitorLayer.addTo(map);
+
+                    // Also, add back the heatmap layer if it was removed
+                    if (heatmapLayer) {
+                        heatmapLayer.eachLayer(function(layer) {
+                            layer.addTo(map);
+                        });
+                    }
+                });
+
+                // Create a legend control
+                var legend = L.control({position: 'bottomright'});
+
+                legend.onAdd = function (map) {
+                    var div = L.DomUtil.create('div', 'info legend'),
+                        categories = ['Home Health/Hospice', 'Specialty Care Clinic', 'Outpatient Ancillary', 'Primary Care Clinic', 'Urgent Care Clinic', 'Hospital', 'Hospitalist Group', 'Pharmacy'],
+                        labels = [];
+
+                    // loop through our density intervals and generate a label with a colored square for each interval
+                    for (var i = 0; i < categories.length; i++) {
+                        labels.push(
+                            '<div class="legend-item" data-type="' + categories[i] + '">' +
+                            '<i style="background:' + getColorByFacilityType(categories[i]) + '; width: 20px; height: 20px; display: inline-block; margin-right: 5px;"></i> ' +
+                            categories[i] +
+                            '</div>'
+                        );
+                    }
+
+                    div.innerHTML = labels.join('<br>');
+                    return div;
+                };
+
+                legend.addTo(map);
+
+                // Add click event listener to legend items
+                document.querySelectorAll('.legend-item').forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        const type = this.getAttribute('data-type');
+                        filterByFacilityType(type);
+                    });
+                });
+
+            }).catch(error => console.error("An error occurred:", error));
+    }
+
+</script>
+
+</body>
+</html>
