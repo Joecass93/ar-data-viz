@@ -122,6 +122,10 @@
                                     radius: 5,
                                     fillOpacity: 0.7
                                 });
+                                
+                                // Bind the tooltip to show "Access Point Name"  
+                                marker.bindTooltip(feature.properties['Access Point Name']);
+                                
                                 marker.on('click', function() {
                                     console.log("Marker clicked");
                                     filterByFacilityType(feature.properties['Access Point Type']);
@@ -137,7 +141,7 @@
                     .then(data => {
                         competitorLayer = L.geoJSON(data, {
                             pointToLayer: function (feature, latlng) {
-                                return L.marker(latlng, {
+                                var marker = L.marker(latlng, {
                                     icon: L.divIcon({
                                         className: 'custom-div-icon',
                                         html: "<div style='width:10px;height:10px;background:navy;transform:rotate(45deg);'></div>",
@@ -145,6 +149,13 @@
                                         iconAnchor: [5, 5]
                                     })
                                 });
+
+                                // Add mouseover event for tooltip
+                                marker.on('mouseover', function() {
+                                    this.bindTooltip(feature.properties['FACILITY_THCIC_NM']).openTooltip();
+                                });
+
+                                return marker;
                             }
                         }).addTo(map);
                 });
