@@ -16,7 +16,7 @@ geocode = RateLimiter(geolocator.geocode, min_delay_seconds=5)
 def facility():
     ## Load the data
     # bsw_data = pd.read_excel(f'{workdir}/ATX Facility List_0725.xlsx')
-    competitor_data = pd.read_excel(f'{workdir}/GAR_THCIC_Facilities.20230906.xlsx')
+    competitor_data = pd.read_excel('GAR_THCIC_Facilities.20230906.xlsx')
 
     # ## Geocode BSW facilities
     # bsw_data['Full_Address'] = bsw_data['Address 1'] + ', ' + bsw_data['City'] + ', ' + bsw_data['State'] + ' ' + bsw_data['Zip'].astype(str)
@@ -44,9 +44,21 @@ def mover():
     print("Geocoding complete. Data has been saved.")
 
 
+def jv_facilities():
+    ## import dataset (nextcare facilites)
+    workdir = f'{expanduser("~")}/Google Drive/Shared Drives/Analytics COE/Client Specific Projects/BSWH/General Analytics'
+    df = pd.read_excel(f'{workdir}/BSW NextCare Facilities.xlsx')
+
+    ## geocode the facility locations
+    df['Latitude'], df['Longitude'] = zip(*df['Address'].apply(lambda x: get_lat_lon(x)))
+    print( df )
+    df.to_excel('Geocoded_NextCare_Facility_List.xlsx', index=False)
+    
+
+
 def geojson_builder():
     ## load the geocoded csv/excel file 
-    df = pd.read_csv('geocoded_atx_mover_sample.csv')
+    df = pd.read_csv('bsw_atx_facilities_geocode.csv')
     
     # Create a GeoDataFrame with the coordinate data
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.Longitude, df.Latitude))
@@ -55,10 +67,10 @@ def geojson_builder():
     gdf.crs = "EPSG:4326"
 
     # Drop unnecessary columns for confidentiality
-    gdf.drop(columns=df.columns.difference(['Latitude', 'Longitude', 'geometry']), inplace=True)
+    gdf.drop(columns=df.columns.difference(['Latitude', 'Longitude', 'geometry', 'Access Point Name', 'Access Point Type']), inplace=True)
 
     # Save as GeoJSON file
-    geojson_file_path = 'geocoded_atx_mover_sample.geojson'
+    geojson_file_path = 'bsw_atx_facilities.geojson'
     gdf.to_file(geojson_file_path, driver='GeoJSON')
 
 

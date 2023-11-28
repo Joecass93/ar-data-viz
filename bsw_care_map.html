@@ -86,6 +86,7 @@
                     case 'Hospital': return 'yellow';
                     case 'Hospitalist Group': return 'brown';
                     case 'Pharmacy': return 'pink';
+                    case 'Other': return 'lightblue';
                     default: return 'grey';
                     }   
                 }
@@ -266,7 +267,7 @@
 
                 legend.onAdd = function (map) {
                     var div = L.DomUtil.create('div', 'info legend'),
-                        categories = ['Home Health/Hospice', 'Specialty Care Clinic', 'Outpatient Ancillary', 'Primary Care Clinic', 'Urgent Care Clinic', 'Hospital', 'Hospitalist Group', 'Pharmacy'],
+                        categories = ['Home Health/Hospice', 'Specialty Care Clinic', 'Outpatient Ancillary', 'Primary Care Clinic', 'Urgent Care Clinic', 'Hospital', 'Hospitalist Group', 'Pharmacy', 'Other'],
                         labels = [];
 
                     // loop through our density intervals and generate a label with a colored square for each interval

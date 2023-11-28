@@ -154,7 +154,7 @@
     });
 
     // Fetch and add BSW facilities to the map
-    fetch('bsw_facilities.geojson')
+    fetch('bsw_atx_facilities.geojson')
     .then(response => response.json())
     .then(data => {
         L.geoJSON(data, {
@@ -163,8 +163,8 @@
             },
             onEachFeature: function (feature, layer) {
                 // Attach a tooltip with the name of the facility
-                if (feature.properties && feature.properties["Access Point"]) {
-                    layer.bindTooltip(feature.properties["Access Point"]);
+                if (feature.properties && feature.properties["Access Point Name"]) {
+                    layer.bindTooltip(feature.properties["Access Point Name"]);
                 }
                 layer.on('click', handleFacilityClick);
                 allFacilityLayers.push(layer);  // Push each layer to the allFacilityLayers array
